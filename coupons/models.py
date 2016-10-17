@@ -27,12 +27,14 @@ redeem_done = Signal(providing_args=["coupon"])
 
 
 class CouponManager(models.Manager):
-    def create_coupon(self, type, value, users=[], valid_until=None, prefix="", campaign=None, user_limit=None):
+    def create_coupon(self, type, value, criteria, users=[], valid_until=None, redeem_limit=None, prefix="", campaign=None, user_limit=None):
         coupon = self.create(
             value=value,
+            criteria=criteria,
             code=Coupon.generate_code(prefix),
             type=type,
             valid_until=valid_until,
+            redeem_limit=redeem_limit,
             campaign=campaign,
         )
         if user_limit is not None:  # otherwise use default value of model
@@ -41,7 +43,7 @@ class CouponManager(models.Manager):
             coupon.save()
         except IntegrityError:
             # Try again with other code
-            coupon = Coupon.objects.create_coupon(type, value, users, valid_until, prefix, campaign)
+            coupon = Coupon.objects.create_coupon(type, value, criteria, users, valid_until, redeem_limit, prefix, campaign)
         if not isinstance(users, list):
             users = [users]
         for user in users:
@@ -49,10 +51,10 @@ class CouponManager(models.Manager):
                 CouponUser(user=user, coupon=coupon).save()
         return coupon
 
-    def create_coupons(self, quantity, type, value, valid_until=None, prefix="", campaign=None):
+    def create_coupons(self, quantity, type, value, criteria, valid_until=None, redeem_limit=None, prefix="", campaign=None):
         coupons = []
         for i in range(quantity):
-            coupons.append(self.create_coupon(type, value, None, valid_until, prefix, campaign))
+            coupons.append(self.create_coupon(type, value, criteria, None, valid_until, redeem_limit, prefix, campaign))
         return coupons
 
     def used(self):
@@ -74,13 +76,17 @@ class CouponManager(models.Manager):
 @python_2_unicode_compatible
 class Coupon(models.Model):
     value = models.IntegerField(_("Value"), help_text=_("Arbitrary coupon value"))
+    criteria = models.IntegerField(
+        _("Criteria"), blank=True, null=True,
+        help_text=_("Arbitrary coupon criteria amount that must be met for the coupon to be valid"))
     code = models.CharField(
         _("Code"), max_length=30, unique=True, blank=True,
         help_text=_("Leaving this field empty will generate a random code."))
     type = models.CharField(_("Type"), max_length=20, choices=COUPON_TYPES)
     user_limit = models.PositiveIntegerField(_("User limit"), default=1)
-    redeem_limit = models.PositiveIntegerField(_("Redeem limit"), default=None,
-        blank=True, null=True, help_text=_("Leave empty for coupons that have no redeem limit"))
+    redeem_limit = models.PositiveIntegerField(
+        _("Redeem limit"), default=None, blank=True, null=True,
+        help_text=_("Leave empty for coupons that have no redeem limit"))
     redeem_count = models.IntegerField(_("Redeem Count"), default=0)
     created_at = models.DateTimeField(_("Created at"), auto_now_add=True)
     valid_until = models.DateTimeField(
