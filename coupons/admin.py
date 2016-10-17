@@ -26,7 +26,7 @@ class CouponAdmin(admin.ModelAdmin):
     raw_id_fields = ()
     search_fields = ('code', 'value')
     inlines = (CouponUserInline,)
-    exclude = ('users',)
+    exclude = ('users', 'redeem_count')
 
     def user_count(self, inst):
         return inst.users.count()

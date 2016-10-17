@@ -3,7 +3,7 @@ import random
 from django.conf import settings
 from django.db import IntegrityError
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, F
 from django.dispatch import Signal
 from django.utils.encoding import python_2_unicode_compatible
 from django.utils import timezone
@@ -67,6 +67,9 @@ class CouponManager(models.Manager):
     def active(self):
         return self.filter(Q(valid_until__isnull=True) | Q(valid_until__gt=timezone.now()))
 
+    def redeemable(self):
+        return self.active().exclude(Q(redeem_limit__isnull=False) & Q(redeem_limit__gt=F('redeem_count')))
+
 
 @python_2_unicode_compatible
 class Coupon(models.Model):
@@ -76,6 +79,9 @@ class Coupon(models.Model):
         help_text=_("Leaving this field empty will generate a random code."))
     type = models.CharField(_("Type"), max_length=20, choices=COUPON_TYPES)
     user_limit = models.PositiveIntegerField(_("User limit"), default=1)
+    redeem_limit = models.PositiveIntegerField(_("Redeem limit"), default=None,
+        blank=True, null=True, help_text=_("Leave empty for coupons that have no redeem limit"))
+    redeem_count = models.IntegerField(_("Redeem Count"), default=0)
     created_at = models.DateTimeField(_("Created at"), auto_now_add=True)
     valid_until = models.DateTimeField(
         _("Valid until"), blank=True, null=True,
@@ -134,6 +140,8 @@ class Coupon(models.Model):
                 coupon_user = CouponUser(coupon=self, user=user)
         coupon_user.redeemed_at = timezone.now()
         coupon_user.save()
+        self.redeem_count += 1
+        self.save()
         redeem_done.send(sender=self.__class__, coupon=self)
 
 
